@@ -47,6 +47,11 @@ skills:
   unlock-monitor: { enabled: false, schedule: "0 10 * * 1" } # weekly token unlock/vesting tracker
   aixbt-pulse: { enabled: false, schedule: "0 9,21 * * *", model: "claude-sonnet-4-6" } # twice daily — AIXBT free grounding endpoint: cross-domain market pulse (crypto/macro/tradfi/geopolitics) with taxonomy refresh
 
+  # --- System Skills ---
+  dashboard-worker: { enabled: true, schedule: "0 */2 * * *" }
+  make-visible: { enabled: true, schedule: "workflow_dispatch" }
+  idle-worker: { enabled: true, schedule: "0 */6 * * *" }
+
   # --- Afternoon (2 PM UTC) ---
   article: { enabled: false, schedule: "0 14 * * *" }
   technical-explainer: { enabled: false, schedule: "30 14 * * *" } # visual technical explanation with AI-generated hero image
