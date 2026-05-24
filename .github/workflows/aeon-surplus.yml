@@ -1,0 +1,148 @@
+name: Aeon (Surplus)
+run-name: "skill: ${{ inputs.skill || 'feature' }}${{ inputs.var && format(' ({0})', inputs.var) || '' }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      skill:
+        description: 'Skill name (must match a directory under skills/)'
+        required: true
+        type: string
+      model:
+        description: 'Model'
+        required: false
+        type: choice
+        default: 'surplus/deepseek-v3.2'
+        options:
+          - 'surplus/deepseek-v3.2'
+          - 'surplus/kimi-k2.5'
+          - 'surplus/claude-opus-4.7'
+          - 'surplus/deepseek-v4-pro'
+      var:
+        description: 'Variable (e.g. AI, bitcoin, owner/repo)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  NODE_OPTIONS: '--no-deprecation'
+
+concurrency:
+  group: aeon-${{ inputs.skill || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "aeonframework"
+          git config user.email "aeonframework@proton.me"
+
+      - name: Run skill via Surplus API
+        env:
+          SURPLUS_API_KEY: ${{ secrets.SURPLUS_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SKILL_VAR: ${{ inputs.var }}
+        run: |
+          set -euo pipefail
+          
+          TODAY=$(date -u +%Y-%m-%d)
+          SKILL_NAME="${{ inputs.skill }}"
+          MODEL="${{ inputs.model }}"
+          VAR="${SKILL_VAR:-}"
+          
+          echo "Using model: $MODEL"
+          echo "Skill: $SKILL_NAME"
+          
+          # Read the skill file
+          SKILL_FILE="skills/${SKILL_NAME}/SKILL.md"
+          if [ ! -f "$SKILL_FILE" ]; then
+            echo "::error::Skill file not found: $SKILL_FILE"
+            exit 1
+          fi
+          
+          SKILL_CONTENT=$(cat "$SKILL_FILE")
+          
+          # Build the prompt
+          PROMPT="Today is $TODAY.
+
+Execute the following skill:
+
+$SKILL_CONTENT"
+
+          if [ -n "$VAR" ]; then
+            PROMPT="$PROMPT
+
+Variable override: var=$VAR"
+          fi
+          
+          # Prepare Surplus API request
+          MODEL_ID=$(echo "$MODEL" | sed 's/surplus\///')
+          
+          echo "Calling Surplus Intelligence API..."
+          
+          # Call Surplus API
+          RESPONSE=$(curl -sS -X POST "https://www.surplusintelligence.ai/api/inference/v1/chat/completions" \
+            -H "Authorization: Bearer ${SURPLUS_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg model "$MODEL_ID" \
+              --arg prompt "$PROMPT" \
+              '{
+                model: $model,
+                messages: [
+                  {role: "system", content: "You are an autonomous agent executing skills. Be precise, show your reasoning, and make minimal surgical changes."},
+                  {role: "user", content: $prompt}
+                ],
+                max_tokens: 32000,
+                temperature: 0.7
+              }')" 2>&1)
+          
+          # Check for API errors
+          if [ $? -ne 0 ]; then
+            echo "::error::Surplus API call failed: $RESPONSE"
+            exit 1
+          fi
+          
+          # Extract result
+          RESULT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty')
+          
+          if [ -z "$RESULT" ]; then
+            echo "::error::Empty response from Surplus API"
+            echo "Full response: $RESPONSE"
+            exit 1
+          fi
+          
+          # Output the result
+          echo "$RESULT"
+          
+          # Save for artifact upload
+          mkdir -p outputs
+          echo "$RESULT" > "outputs/${SKILL_NAME}-$(date +%s).md"
+          
+          # Extract token usage if available
+          INPUT_TOKENS=$(echo "$RESPONSE" | jq '.usage.prompt_tokens // 0')
+          OUTPUT_TOKENS=$(echo "$RESPONSE" | jq '.usage.completion_tokens // 0')
+          TOTAL_TOKENS=$(echo "$RESPONSE" | jq '.usage.total_tokens // 0')
+          
+          echo "::notice::Token usage — input: $INPUT_TOKENS, output: $OUTPUT_TOKENS, total: $TOTAL_TOKENS"
+          
+          # Commit results if skill produced outputs
+          if [ -d "outputs" ] && [ "$(ls -A outputs 2>/dev/null)" ]; then
+            git add outputs/ 2>/dev/null || true
+            git diff --staged --quiet || git commit -m "chore: ${SKILL_NAME} output ($(date -u +%Y-%m-%d))"
+            git push origin main || echo "::warning::Push failed (non-fatal)"
+          fi
