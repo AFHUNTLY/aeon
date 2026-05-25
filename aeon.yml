@@ -51,7 +51,7 @@ skills:
   heartbeat:
     enabled: true
     schedule: "*/5 * * * *"
-  digest:
+  daily-digest:
     enabled: true
     schedule: "0 8 * * *"
     var: "AI agents"
