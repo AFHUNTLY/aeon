@@ -48,6 +48,13 @@ skills:
   aixbt-pulse: { enabled: false, schedule: "0 9,21 * * *", model: "claude-sonnet-4-6" } # twice daily — AIXBT free grounding endpoint: cross-domain market pulse (crypto/macro/tradfi/geopolitics) with taxonomy refresh
 
   # --- System Skills ---
+  heartbeat:
+    enabled: true
+    schedule: "*/5 * * * *"
+  digest:
+    enabled: true
+    schedule: "0 8 * * *"
+    var: "AI agents"
   dashboard-worker: { enabled: true, schedule: "0 */2 * * *" }
   make-visible: { enabled: true, schedule: "workflow_dispatch" }
   idle-worker: { enabled: true, schedule: "0 */6 * * *" }
