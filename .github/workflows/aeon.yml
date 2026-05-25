@@ -237,6 +237,7 @@ jobs:
         id: run
         if: steps.work.outputs.mode != ''
         env:
+          OPENAI_API_KEY: ${{ secrets.SURPLUS_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           BANKR_LLM_KEY: ${{ secrets.BANKR_LLM_KEY }}
@@ -299,6 +300,16 @@ jobs:
             unset ANTHROPIC_API_KEY
             unset CLAUDE_CODE_OAUTH_TOKEN
             echo "::notice::Routing through Bankr Gateway (https://llm.bankr.bot)"
+          elif [ "$GATEWAY" = "surplus" ]; then
+            if [ -z "${OPENAI_API_KEY:-}" ]; then
+              echo "::error::gateway.provider=surplus but SURPLUS_API_KEY secret is not set"
+              exit 1
+            fi
+            export ANTHROPIC_BASE_URL="https://www.surplusintelligence.ai/api/inference/v1"
+            export ANTHROPIC_AUTH_TOKEN="$OPENAI_API_KEY"
+            unset ANTHROPIC_API_KEY
+            unset CLAUDE_CODE_OAUTH_TOKEN
+            echo "::notice::Routing through Surplus Gateway (https://www.surplusintelligence.ai)"
           else
             echo "::notice::Using direct Anthropic API"
           fi
